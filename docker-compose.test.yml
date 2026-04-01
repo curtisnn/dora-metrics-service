@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  influxdb-test:
+    image: influxdb:2.7-alpine
+    ports:
+      - "8087:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=testuser
+      - DOCKER_INFLUXDB_INIT_PASSWORD=testpassword
+      - DOCKER_INFLUXDB_INIT_ORG=test-org
+      - DOCKER_INFLUXDB_INIT_BUCKET=test-metrics
+      - DOCKER_INFLUXDB_INIT_RETENTION=1d
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=test-token-12345
+    tmpfs:
+      - /var/lib/influxdb2:rw
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DORA Metrics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-unit {
+            font-size: 1rem;
+            color: #888;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            padding: 3rem;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .status-indicator {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .status-indicator.loading::before {
+            content: '🔄 ';
+        }
+
+        .status-indicator.success::before {
+            content: '✓ ';
+            color: #0a0;
+        }
+
+        @media (max-width: 768px) {
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .metric-value {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="status-indicator" id="statusIndicator">Loading...</div>
+
+    <div class="container">
+        <header>
+            <h1>DORA Metrics Dashboard</h1>
+            <p class="subtitle">Real-time DevOps Performance Metrics</p>
+        </header>
+
+        <div id="errorContainer"></div>
+
+        <div id="loadingState" class="loading">
+            Loading metrics data...
+        </div>
+
+        <div id="dashboardContent" style="display: none;">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Deployment Frequency</div>
+                    <div class="metric-value" id="deploymentFrequency">-</div>
+                    <div class="metric-unit">deploys per day (7-day avg)</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Lead Time for Changes</div>
+                    <div class="metric-value" id="leadTime">-</div>
+                    <div class="metric-unit">hours (7-day avg)</div>
+                </div>
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-card">
+                    <div class="chart-title">Deployment Frequency (30-day trend)</div>
+                    <div class="chart-container">
+                        <canvas id="deploymentChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-title">Lead Time for Changes (30-day trend)</div>
+                    <div class="chart-container">
+                        <canvas id="leadTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let deploymentChart = null;
+        let leadTimeChart = null;
+
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        font: {
+                            size: 12
+                        }
+                    }
+                },
+                x: {
+                    ticks: {
+                        font: {
+                            size: 11
+                        },
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            }
+        };
+
+        async function fetchDashboardData() {
+            const statusIndicator = document.getElementById('statusIndicator');
+            statusIndicator.textContent = 'Loading...';
+            statusIndicator.className = 'status-indicator loading';
+
+            try {
+                const response = await fetch('/api/dashboard?days=30');
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'Failed to fetch dashboard data');
+                }
+
+                const result = await response.json();
+                updateDashboard(result.data);
+
+                statusIndicator.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+                statusIndicator.className = 'status-indicator success';
+            } catch (error) {
+                showError(error.message);
+                statusIndicator.textContent = 'Update failed';
+                statusIndicator.className = 'status-indicator';
+            }
+        }
+
+        function updateDashboard(data) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('dashboardContent').style.display = 'block';
+            document.getElementById('errorContainer').innerHTML = '';
+
+            // Update metric cards
+            document.getElementById('deploymentFrequency').textContent =
+                data.deploymentFrequency.current.toFixed(1);
+            document.getElementById('leadTime').textContent =
+                data.leadTime.current.toFixed(1);
+
+            // Update deployment frequency chart
+            const deploymentLabels = data.deploymentFrequency.trend.map(d =>
+                new Date(d.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            );
+            const deploymentValues = data.deploymentFrequency.trend.map(d => d.value);
+
+            if (deploymentChart) {
+                deploymentChart.destroy();
+            }
+
+            const deploymentCtx = document.getElementById('deploymentChart').getContext('2d');
+            deploymentChart = new Chart(deploymentCtx, {
+                type: 'line',
+                data: {
+                    labels: deploymentLabels,
+                    datasets: [{
+                        label: 'Deployments',
+                        data: deploymentValues,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: chartOptions
+            });
+
+            // Update lead time chart
+            const leadTimeLabels = data.leadTime.trend.map(d =>
+                new Date(d.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            );
+            const leadTimeValues = data.leadTime.trend.map(d => d.value);
+
+            if (leadTimeChart) {
+                leadTimeChart.destroy();
+            }
+
+            const leadTimeCtx = document.getElementById('leadTimeChart').getContext('2d');
+            leadTimeChart = new Chart(leadTimeCtx, {
+                type: 'line',
+                data: {
+                    labels: leadTimeLabels,
+                    datasets: [{
+                        label: 'Lead Time (hours)',
+                        data: leadTimeValues,
+                        borderColor: '#764ba2',
+                        backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: chartOptions
+            });
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = `<div class="error">Error: ${message}</div>`;
+            document.getElementById('loadingState').style.display = 'none';
+        }
+
+        // Initial load
+        fetchDashboardData();
+
+        // Auto-refresh every 30 seconds
+        setInterval(fetchDashboardData, 30000);
+    </script>
+</body>
+</html>
