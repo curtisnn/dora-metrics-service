@@ -1,12 +1,17 @@
 #!/bin/bash
 # health-check.sh - Run after every deployment
-# Usage: ./health-check.sh
+# Usage: ./health-check.sh [base_url]
+# Default: http://localhost:3000
+
+BASE_URL="${1:-http://localhost:3000}"
 
 echo "=== DORA Metrics Service Health Check ==="
+echo "Target: $BASE_URL"
+echo ""
 
 # 1. Service responding
 echo "1. Checking service health endpoint..."
-HEALTH=$(curl -s http://localhost:3000/health)
+HEALTH=$(curl -s ${BASE_URL}/health)
 STATUS=$(echo $HEALTH | jq -r '.status')
 if [ "$STATUS" != "healthy" ]; then
   echo "❌ FAILED: Service health check failed"
@@ -17,7 +22,7 @@ echo "✅ PASSED: Service is healthy"
 
 # 2. Dashboard accessible
 echo "2. Checking dashboard..."
-DASHBOARD=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/dashboard/)
+DASHBOARD=$(curl -s -o /dev/null -w "%{http_code}" ${BASE_URL}/dashboard/)
 if [ "$DASHBOARD" != "200" ]; then
   echo "❌ FAILED: Dashboard not accessible (HTTP $DASHBOARD)"
   exit 1
@@ -26,7 +31,7 @@ echo "✅ PASSED: Dashboard accessible"
 
 # 3. API responding
 echo "3. Checking API endpoint..."
-API=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/dashboard)
+API=$(curl -s -o /dev/null -w "%{http_code}" ${BASE_URL}/api/dashboard)
 if [ "$API" != "200" ]; then
   echo "❌ FAILED: API not responding (HTTP $API)"
   exit 1
