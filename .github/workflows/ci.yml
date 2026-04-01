@@ -67,7 +67,7 @@ jobs:
           echo "✅ Coverage meets 80% threshold"
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         if: always()
         with:
           files: ./coverage/coverage-summary.json
