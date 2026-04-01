@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operational Health Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .nav-link {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-link.active {
+            background: white;
+            color: #11998e;
+        }
+
+        .section-title {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-unit {
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .metric-status {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+        }
+
+        .status-healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-critical {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            padding: 3rem;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .status-indicator {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            font-size: 0.85rem;
+            color: #666;
+            z-index: 1000;
+        }
+
+        .status-indicator.loading::before {
+            content: '🔄 ';
+        }
+
+        .status-indicator.success::before {
+            content: '✓ ';
+            color: #0a0;
+        }
+
+        .export-button {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: white;
+            color: #11998e;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            z-index: 1000;
+        }
+
+        .export-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .metric-value {
+                font-size: 2rem;
+            }
+
+            .nav-links {
+                flex-direction: column;
+            }
+
+            .export-button {
+                bottom: 1rem;
+                right: 1rem;
+                padding: 0.75rem 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="status-indicator" id="statusIndicator">Loading...</div>
+
+    <div class="container">
+        <header>
+            <h1>Operational Health Dashboard</h1>
+            <p class="subtitle">Real-time System Monitoring & Performance</p>
+        </header>
+
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-link">DORA Metrics</a>
+            <a href="/dashboard/ops.html" class="nav-link active">Operations</a>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div id="loadingState" class="loading">
+            Loading operational metrics...
+        </div>
+
+        <div id="dashboardContent" style="display: none;">
+            <!-- Service Health Section -->
+            <div class="section-title">⚡ Service Health</div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Uptime</div>
+                    <div class="metric-value" id="uptime">-</div>
+                    <div class="metric-unit" id="uptimeUnit">seconds</div>
+                    <span class="metric-status status-healthy" id="uptimeStatus">Healthy</span>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Response Time (P95)</div>
+                    <div class="metric-value" id="responseTime">-</div>
+                    <div class="metric-unit">seconds</div>
+                    <span class="metric-status status-healthy" id="responseTimeStatus">Healthy</span>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Error Rate</div>
+                    <div class="metric-value" id="errorRate">-</div>
+                    <div class="metric-unit">% of requests</div>
+                    <span class="metric-status status-healthy" id="errorRateStatus">Healthy</span>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Request Rate</div>
+                    <div class="metric-value" id="requestRate">-</div>
+                    <div class="metric-unit">requests/sec</div>
+                </div>
+            </div>
+
+            <!-- Queue Processing Section -->
+            <div class="section-title">📊 Queue Processing</div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Queue Depth</div>
+                    <div class="metric-value" id="queueDepth">-</div>
+                    <div class="metric-unit">pending events</div>
+                    <span class="metric-status status-healthy" id="queueDepthStatus">Healthy</span>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Processing Rate</div>
+                    <div class="metric-value" id="processingRate">-</div>
+                    <div class="metric-unit">webhooks/sec</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Processing Latency (P95)</div>
+                    <div class="metric-value" id="processingLatency">-</div>
+                    <div class="metric-unit">seconds</div>
+                    <span class="metric-status status-healthy" id="latencyStatus">Healthy</span>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Failed Webhooks</div>
+                    <div class="metric-value" id="failedWebhooks">-</div>
+                    <div class="metric-unit">total failures</div>
+                </div>
+            </div>
+
+            <!-- Data Quality Section -->
+            <div class="section-title">💾 Data Quality</div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">InfluxDB Status</div>
+                    <div class="metric-value" id="influxdbStatus">-</div>
+                    <div class="metric-unit">connection state</div>
+                    <span class="metric-status status-healthy" id="influxdbStatusBadge">Connected</span>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Write Rate</div>
+                    <div class="metric-value" id="writeRate">-</div>
+                    <div class="metric-unit">writes/sec</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Write Latency</div>
+                    <div class="metric-value" id="writeLatency">-</div>
+                    <div class="metric-unit">seconds</div>
+                    <span class="metric-status status-healthy" id="writeLatencyStatus">Healthy</span>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-label">Write Errors</div>
+                    <div class="metric-value" id="writeErrors">-</div>
+                    <div class="metric-unit">total errors</div>
+                </div>
+            </div>
+        </div>
+
+        <button class="export-button" id="exportButton" style="display: none;">
+            📥 Export Metrics
+        </button>
+    </div>
+
+    <script>
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+
+            if (days > 0) {
+                return { value: days, unit: days === 1 ? 'day' : 'days' };
+            } else if (hours > 0) {
+                return { value: hours, unit: hours === 1 ? 'hour' : 'hours' };
+            } else {
+                return { value: minutes, unit: minutes === 1 ? 'minute' : 'minutes' };
+            }
+        }
+
+        function getStatusClass(metric, value) {
+            // Define thresholds for different metrics
+            const thresholds = {
+                errorRate: { warning: 1, critical: 5 },
+                responseTime: { warning: 2, critical: 5 },
+                queueDepth: { warning: 10, critical: 50 },
+                latency: { warning: 2, critical: 5 },
+                writeLatency: { warning: 0.2, critical: 0.5 },
+            };
+
+            const t = thresholds[metric];
+            if (!t) return 'status-healthy';
+
+            if (value >= t.critical) return 'status-critical';
+            if (value >= t.warning) return 'status-warning';
+            return 'status-healthy';
+        }
+
+        function getStatusText(statusClass) {
+            if (statusClass === 'status-critical') return 'Critical';
+            if (statusClass === 'status-warning') return 'Warning';
+            return 'Healthy';
+        }
+
+        async function fetchOpsData() {
+            const statusIndicator = document.getElementById('statusIndicator');
+            statusIndicator.textContent = 'Loading...';
+            statusIndicator.className = 'status-indicator loading';
+
+            try {
+                const response = await fetch('/api/ops');
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'Failed to fetch operational metrics');
+                }
+
+                const result = await response.json();
+                updateDashboard(result.data);
+
+                statusIndicator.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+                statusIndicator.className = 'status-indicator success';
+            } catch (error) {
+                showError(error.message);
+                statusIndicator.textContent = 'Update failed';
+                statusIndicator.className = 'status-indicator';
+            }
+        }
+
+        function updateDashboard(data) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('dashboardContent').style.display = 'block';
+            document.getElementById('exportButton').style.display = 'block';
+            document.getElementById('errorContainer').innerHTML = '';
+
+            // Service Health
+            const uptimeFormatted = formatUptime(data.serviceHealth.uptime);
+            document.getElementById('uptime').textContent = uptimeFormatted.value;
+            document.getElementById('uptimeUnit').textContent = uptimeFormatted.unit;
+
+            document.getElementById('responseTime').textContent =
+                data.serviceHealth.responseTime.p95.toFixed(2);
+            const responseTimeStatus = getStatusClass('responseTime', data.serviceHealth.responseTime.p95);
+            const responseTimeEl = document.getElementById('responseTimeStatus');
+            responseTimeEl.className = 'metric-status ' + responseTimeStatus;
+            responseTimeEl.textContent = getStatusText(responseTimeStatus);
+
+            document.getElementById('errorRate').textContent =
+                data.serviceHealth.errorRate.toFixed(2);
+            const errorRateStatus = getStatusClass('errorRate', data.serviceHealth.errorRate);
+            const errorRateEl = document.getElementById('errorRateStatus');
+            errorRateEl.className = 'metric-status ' + errorRateStatus;
+            errorRateEl.textContent = getStatusText(errorRateStatus);
+
+            document.getElementById('requestRate').textContent =
+                data.serviceHealth.requestRate.toFixed(2);
+
+            // Queue Processing
+            document.getElementById('queueDepth').textContent =
+                data.queueProcessing.queueDepth;
+            const queueDepthStatus = getStatusClass('queueDepth', data.queueProcessing.queueDepth);
+            const queueDepthEl = document.getElementById('queueDepthStatus');
+            queueDepthEl.className = 'metric-status ' + queueDepthStatus;
+            queueDepthEl.textContent = getStatusText(queueDepthStatus);
+
+            document.getElementById('processingRate').textContent =
+                data.queueProcessing.processingRate.toFixed(2);
+
+            document.getElementById('processingLatency').textContent =
+                data.queueProcessing.processingLatency.p95.toFixed(2);
+            const latencyStatus = getStatusClass('latency', data.queueProcessing.processingLatency.p95);
+            const latencyEl = document.getElementById('latencyStatus');
+            latencyEl.className = 'metric-status ' + latencyStatus;
+            latencyEl.textContent = getStatusText(latencyStatus);
+
+            document.getElementById('failedWebhooks').textContent =
+                data.queueProcessing.failedWebhooks;
+
+            // Data Quality
+            const influxConnected = data.dataQuality.influxdbConnectionStatus === 1;
+            document.getElementById('influxdbStatus').textContent =
+                influxConnected ? '●' : '○';
+            const influxStatusEl = document.getElementById('influxdbStatusBadge');
+            influxStatusEl.className = 'metric-status ' + (influxConnected ? 'status-healthy' : 'status-critical');
+            influxStatusEl.textContent = influxConnected ? 'Connected' : 'Disconnected';
+
+            document.getElementById('writeRate').textContent =
+                data.dataQuality.influxdbWriteRate.toFixed(2);
+
+            document.getElementById('writeLatency').textContent =
+                data.dataQuality.influxdbWriteLatency.toFixed(3);
+            const writeLatencyStatus = getStatusClass('writeLatency', data.dataQuality.influxdbWriteLatency);
+            const writeLatencyEl = document.getElementById('writeLatencyStatus');
+            writeLatencyEl.className = 'metric-status ' + writeLatencyStatus;
+            writeLatencyEl.textContent = getStatusText(writeLatencyStatus);
+
+            document.getElementById('writeErrors').textContent =
+                data.dataQuality.influxdbWriteErrors;
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = `<div class="error">Error: ${message}</div>`;
+            document.getElementById('loadingState').style.display = 'none';
+        }
+
+        // Export functionality
+        document.getElementById('exportButton').addEventListener('click', () => {
+            window.location.href = '/api/ops/export';
+        });
+
+        // Initial load
+        fetchOpsData();
+
+        // Auto-refresh every 30 seconds
+        setInterval(fetchOpsData, 30000);
+    </script>
+</body>
+</html>

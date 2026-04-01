@@ -10,6 +10,7 @@ import healthRoutes from './routes/healthRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import metricsRoutes from './routes/metricsRoutes';
+import opsRoutes from './routes/opsRoutes';
 
 export const createApp = () => {
   const app = express();
@@ -46,6 +47,7 @@ export const createApp = () => {
   app.use('/', webhookRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/', metricsRoutes);
+  app.use('/', opsRoutes);
 
   // Error handling (must be last)
   app.use(notFoundHandler);

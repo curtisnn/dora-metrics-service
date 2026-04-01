@@ -41,6 +41,33 @@
             opacity: 0.9;
         }
 
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .nav-link {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-link.active {
+            background: white;
+            color: #667eea;
+        }
+
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -154,6 +181,10 @@
             .metric-value {
                 font-size: 2.5rem;
             }
+
+            .nav-links {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -165,6 +196,11 @@
             <h1>DORA Metrics Dashboard</h1>
             <p class="subtitle">Real-time DevOps Performance Metrics</p>
         </header>
+
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-link active">DORA Metrics</a>
+            <a href="/dashboard/ops.html" class="nav-link">Operations</a>
+        </div>
 
         <div id="errorContainer"></div>
 
