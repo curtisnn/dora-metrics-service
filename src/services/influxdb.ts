@@ -1,6 +1,11 @@
 import { InfluxDB, Point, WriteApi } from '@influxdata/influxdb-client';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
+import {
+  influxdbWriteCounter,
+  influxdbWriteDuration,
+  influxdbConnectionStatus,
+} from './metrics';
 
 /**
  * InfluxDB service for writing DORA metrics
@@ -46,6 +51,7 @@ class InfluxDBService {
       this.writeApi.useDefaultTags({ service: 'dora-metrics-ingestion' });
 
       this.enabled = true;
+      influxdbConnectionStatus.set(1);
 
       logger.info('InfluxDB connection initialized', {
         url: INFLUXDB_URL,
@@ -53,6 +59,7 @@ class InfluxDBService {
         bucket: INFLUXDB_BUCKET,
       });
     } catch (error) {
+      influxdbConnectionStatus.set(0);
       logger.error('Failed to initialize InfluxDB connection', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -87,29 +94,42 @@ class InfluxDBService {
       return;
     }
 
-    const point = new Point('deployments')
-      .tag('environment', data.environment)
-      .tag('status', data.status)
-      .tag('repository', data.repository)
-      .stringField('commit_sha', data.commitSha)
-      .timestamp(data.timestamp);
+    const startTime = Date.now();
+    let writeStatus = 'success';
 
-    if (data.leadTimeMinutes !== undefined) {
-      point.floatField('lead_time_minutes', data.leadTimeMinutes);
+    try {
+      const point = new Point('deployments')
+        .tag('environment', data.environment)
+        .tag('status', data.status)
+        .tag('repository', data.repository)
+        .stringField('commit_sha', data.commitSha)
+        .timestamp(data.timestamp);
+
+      if (data.leadTimeMinutes !== undefined) {
+        point.floatField('lead_time_minutes', data.leadTimeMinutes);
+      }
+
+      if (data.deliveryId) {
+        point.stringField('delivery_id', data.deliveryId);
+      }
+
+      this.writeApi.writePoint(point);
+
+      logger.debug('Deployment event written to InfluxDB', {
+        measurement: 'deployments',
+        environment: data.environment,
+        repository: data.repository,
+        timestamp: data.timestamp.toISOString(),
+      });
+    } catch (error) {
+      writeStatus = 'error';
+      throw error;
+    } finally {
+      // Track write metrics
+      const duration = (Date.now() - startTime) / 1000;
+      influxdbWriteDuration.observe({ measurement: 'deployments' }, duration);
+      influxdbWriteCounter.inc({ measurement: 'deployments', status: writeStatus });
     }
-
-    if (data.deliveryId) {
-      point.stringField('delivery_id', data.deliveryId);
-    }
-
-    this.writeApi.writePoint(point);
-
-    logger.debug('Deployment event written to InfluxDB', {
-      measurement: 'deployments',
-      environment: data.environment,
-      repository: data.repository,
-      timestamp: data.timestamp.toISOString(),
-    });
   }
 
   /**
@@ -133,29 +153,42 @@ class InfluxDBService {
       return;
     }
 
-    const point = new Point('incidents')
-      .tag('severity', data.severity)
-      .tag('status', data.status)
-      .tag('repository', data.repository)
-      .stringField('description', data.description)
-      .timestamp(data.timestamp);
+    const startTime = Date.now();
+    let writeStatus = 'success';
 
-    if (data.durationMinutes !== undefined) {
-      point.floatField('duration_minutes', data.durationMinutes);
+    try {
+      const point = new Point('incidents')
+        .tag('severity', data.severity)
+        .tag('status', data.status)
+        .tag('repository', data.repository)
+        .stringField('description', data.description)
+        .timestamp(data.timestamp);
+
+      if (data.durationMinutes !== undefined) {
+        point.floatField('duration_minutes', data.durationMinutes);
+      }
+
+      if (data.relatedDeployment) {
+        point.stringField('related_deployment', data.relatedDeployment);
+      }
+
+      this.writeApi.writePoint(point);
+
+      logger.debug('Incident event written to InfluxDB', {
+        measurement: 'incidents',
+        severity: data.severity,
+        repository: data.repository,
+        timestamp: data.timestamp.toISOString(),
+      });
+    } catch (error) {
+      writeStatus = 'error';
+      throw error;
+    } finally {
+      // Track write metrics
+      const duration = (Date.now() - startTime) / 1000;
+      influxdbWriteDuration.observe({ measurement: 'incidents' }, duration);
+      influxdbWriteCounter.inc({ measurement: 'incidents', status: writeStatus });
     }
-
-    if (data.relatedDeployment) {
-      point.stringField('related_deployment', data.relatedDeployment);
-    }
-
-    this.writeApi.writePoint(point);
-
-    logger.debug('Incident event written to InfluxDB', {
-      measurement: 'incidents',
-      severity: data.severity,
-      repository: data.repository,
-      timestamp: data.timestamp.toISOString(),
-    });
   }
 
   /**
@@ -178,24 +211,37 @@ class InfluxDBService {
       return;
     }
 
-    const point = new Point('dora_metrics')
-      .tag('metric_name', data.metricName)
-      .tag('window', data.window)
-      .tag('environment', data.environment)
-      .tag('repository', data.repository)
-      .floatField('value', data.value)
-      .timestamp(data.timestamp);
+    const startTime = Date.now();
+    let writeStatus = 'success';
 
-    this.writeApi.writePoint(point);
+    try {
+      const point = new Point('dora_metrics')
+        .tag('metric_name', data.metricName)
+        .tag('window', data.window)
+        .tag('environment', data.environment)
+        .tag('repository', data.repository)
+        .floatField('value', data.value)
+        .timestamp(data.timestamp);
 
-    logger.debug('DORA metric written to InfluxDB', {
-      measurement: 'dora_metrics',
-      metricName: data.metricName,
-      window: data.window,
-      environment: data.environment,
-      value: data.value,
-      timestamp: data.timestamp.toISOString(),
-    });
+      this.writeApi.writePoint(point);
+
+      logger.debug('DORA metric written to InfluxDB', {
+        measurement: 'dora_metrics',
+        metricName: data.metricName,
+        window: data.window,
+        environment: data.environment,
+        value: data.value,
+        timestamp: data.timestamp.toISOString(),
+      });
+    } catch (error) {
+      writeStatus = 'error';
+      throw error;
+    } finally {
+      // Track write metrics
+      const duration = (Date.now() - startTime) / 1000;
+      influxdbWriteDuration.observe({ measurement: 'dora_metrics' }, duration);
+      influxdbWriteCounter.inc({ measurement: 'dora_metrics', status: writeStatus });
+    }
   }
 
   /**

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { logger, webhookLogger } from '../config/logger';
 import { RequestWithId, RequestWithGitHub } from '../types';
 import { eventQueue } from '../services/eventQueue';
+import { webhookCounter } from '../services/metrics';
 
 // GitHub deployment event schema
 const deploymentSchema = z.object({
@@ -137,6 +138,7 @@ export const handleGitHubWebhook = async (
           eventType,
           deliveryId,
         });
+        webhookCounter.inc({ event_type: eventType, status: 'unsupported' });
         return res.status(400).json({
           error: {
             message: `Unsupported event type: ${eventType}. Supported types: deployment, deployment_status, push`,
@@ -147,6 +149,9 @@ export const handleGitHubWebhook = async (
 
     // Enqueue event for processing
     const event = eventQueue.enqueue(eventType, deliveryId, validatedPayload);
+
+    // Track webhook metric
+    webhookCounter.inc({ event_type: eventType, status: 'success' });
 
     logger.info('GitHub webhook processed and enqueued', {
       requestId,
@@ -176,6 +181,7 @@ export const handleGitHubWebhook = async (
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      webhookCounter.inc({ event_type: eventType, status: 'validation_error' });
       logger.error('GitHub webhook validation failed', {
         requestId,
         eventType,
@@ -191,6 +197,7 @@ export const handleGitHubWebhook = async (
       });
     }
 
+    webhookCounter.inc({ event_type: eventType, status: 'error' });
     logger.error('GitHub webhook processing error', {
       requestId,
       eventType,

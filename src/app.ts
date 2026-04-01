@@ -4,10 +4,12 @@ import helmet from 'helmet';
 import cors from 'cors';
 import path from 'path';
 import { requestIdMiddleware } from './middleware/requestId';
+import { metricsMiddleware } from './middleware/metricsMiddleware';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import healthRoutes from './routes/healthRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
+import metricsRoutes from './routes/metricsRoutes';
 
 export const createApp = () => {
   const app = express();
@@ -33,6 +35,9 @@ export const createApp = () => {
   // Request ID middleware (must be before routes)
   app.use(requestIdMiddleware);
 
+  // Metrics middleware (must be before routes)
+  app.use(metricsMiddleware);
+
   // Static files for dashboard
   app.use('/dashboard', express.static(path.join(__dirname, '../public')));
 
@@ -40,6 +45,7 @@ export const createApp = () => {
   app.use('/', healthRoutes);
   app.use('/', webhookRoutes);
   app.use('/api/dashboard', dashboardRoutes);
+  app.use('/', metricsRoutes);
 
   // Error handling (must be last)
   app.use(notFoundHandler);

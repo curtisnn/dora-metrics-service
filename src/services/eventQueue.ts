@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { WebhookEvent } from '../types';
 import { logger } from '../config/logger';
+import { queueDepth } from './metrics';
 
 /**
  * In-memory event queue for webhook processing
@@ -42,6 +43,10 @@ class EventQueue {
 
     this.queue.push(event);
 
+    // Update queue depth metric
+    const pending = this.queue.filter((e) => !e.processed).length;
+    queueDepth.set(pending);
+
     logger.debug('Event enqueued', {
       eventId: event.id,
       eventType: event.eventType,
@@ -67,6 +72,11 @@ class EventQueue {
     const event = this.queue.find((e) => e.id === eventId);
     if (event) {
       event.processed = true;
+
+      // Update queue depth metric
+      const pending = this.queue.filter((e) => !e.processed).length;
+      queueDepth.set(pending);
+
       logger.debug('Event marked as processed', { eventId });
       return true;
     }
@@ -100,6 +110,7 @@ class EventQueue {
    */
   clear(): void {
     this.queue = [];
+    queueDepth.set(0);
     logger.info('Event queue cleared');
   }
 
@@ -118,6 +129,10 @@ class EventQueue {
 
     const removed = beforeCount - this.queue.length;
     if (removed > 0) {
+      // Update queue depth metric
+      const pending = this.queue.filter((e) => !e.processed).length;
+      queueDepth.set(pending);
+
       logger.info('Event queue cleanup completed', {
         removedCount: removed,
         remainingCount: this.queue.length,

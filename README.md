@@ -332,6 +332,203 @@ This creates ~90 deployment events across 30 days with realistic patterns:
 - 95% success rate
 - Multiple repositories and environments
 
+## Monitoring & Observability
+
+The service includes comprehensive monitoring with Prometheus and Grafana for operational visibility.
+
+### Architecture
+
+- **Prometheus:** Collects metrics from the service `/metrics` endpoint every 10 seconds
+- **Grafana:** Provides dashboards for visualization and alerting
+- **InfluxDB:** Stores DORA metrics data (separate from operational metrics)
+
+### Monitoring Stack
+
+When running with Docker Compose, three monitoring services are available:
+
+1. **Application:** `http://localhost:3000` - DORA metrics ingestion service
+2. **Grafana:** `http://localhost:3001` - Monitoring dashboards (admin/admin)
+3. **Prometheus:** `http://localhost:9090` - Metrics database
+
+### Health Check Endpoint
+
+**GET `/health`**
+
+Returns comprehensive service health status including:
+- Overall service status (healthy/degraded/unhealthy)
+- InfluxDB connection status
+- Webhook processing queue depth
+- Metric processor status
+- Service uptime
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "timestamp": "2026-03-31T22:00:00.000Z",
+  "uptime": 1234,
+  "environment": "production",
+  "checks": {
+    "influxdb": {
+      "status": "connected",
+      "enabled": true
+    },
+    "queue": {
+      "status": "healthy",
+      "pending": 5,
+      "processed": 120,
+      "total": 125,
+      "maxSize": 1000
+    },
+    "processor": {
+      "status": "running",
+      "intervalMs": 5000,
+      "isProcessing": false
+    }
+  }
+}
+```
+
+**Status Codes:**
+- `200` - Service is healthy or degraded
+- `503` - Service is unhealthy
+
+### Metrics Endpoint
+
+**GET `/metrics`**
+
+Prometheus-compatible metrics endpoint exposing operational metrics:
+
+**Application Metrics:**
+- `app_uptime_seconds` - Service uptime in seconds
+- `http_requests_total` - Total HTTP requests (by method, route, status)
+- `http_request_duration_seconds` - HTTP request duration histogram
+- `http_errors_total` - Total HTTP errors (by type)
+
+**Webhook Metrics:**
+- `webhooks_received_total` - Total webhooks received (by event type, status)
+- `webhook_processing_duration_seconds` - Webhook processing duration histogram
+- `webhook_queue_depth` - Current webhook queue depth
+
+**InfluxDB Metrics:**
+- `influxdb_connection_status` - InfluxDB connection status (1=connected, 0=disconnected)
+- `influxdb_writes_total` - Total InfluxDB writes (by measurement, status)
+- `influxdb_write_duration_seconds` - InfluxDB write duration histogram
+
+### Grafana Dashboard
+
+Access the pre-configured monitoring dashboard at `http://localhost:3001`
+
+**Login Credentials:**
+- Username: `admin`
+- Password: `admin`
+
+**Dashboard Panels:**
+1. **Service Uptime** - Application uptime in seconds
+2. **InfluxDB Connection** - Real-time connection status
+3. **Queue Depth** - Current webhook processing queue depth
+4. **HTTP Request Rate** - Requests per second by endpoint
+5. **HTTP Response Time** - p95 and p99 latency percentiles
+6. **Webhook Processing Rate** - Webhooks processed per second
+7. **Webhook Processing Duration** - p95 and p99 processing time
+8. **InfluxDB Write Rate** - Writes per second by measurement
+9. **Error Rate** - Errors per second by type
+
+The dashboard auto-refreshes every 10 seconds and displays the last hour of data by default.
+
+### Prometheus Configuration
+
+The Prometheus configuration is located at `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'dora-metrics-ingestion'
+    static_configs:
+      - targets: ['ingestion:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+```
+
+Metrics are retained for 90 days by default.
+
+### Alerting (Future Enhancement)
+
+To add alerting capabilities:
+
+1. Create `alerts.yml` with alert rules:
+   ```yaml
+   groups:
+     - name: dora_metrics_alerts
+       rules:
+         - alert: HighQueueDepth
+           expr: webhook_queue_depth > 100
+           for: 5m
+           annotations:
+             summary: "High webhook queue depth detected"
+   ```
+
+2. Uncomment the alerting section in `prometheus.yml`
+3. Set up Alertmanager container in `docker-compose.yml`
+4. Configure notification channels (email, Slack, PagerDuty)
+
+### Monitoring Best Practices
+
+**For Production Deployments:**
+
+1. **Set up alerting** for critical metrics:
+   - Queue depth >100 for 5+ minutes
+   - InfluxDB disconnected for 1+ minute
+   - Error rate >5% for 5+ minutes
+   - Metric processor stopped
+
+2. **Configure retention** based on compliance requirements:
+   - Prometheus: Default 90 days (adjustable via `--storage.tsdb.retention.time`)
+   - InfluxDB: Default 90 days (configured in `docker-compose.yml`)
+
+3. **Monitor dashboard performance**:
+   - Keep query time windows reasonable (<7 days for high-resolution data)
+   - Use downsampling for long-term trends
+
+4. **Set up log aggregation** (ELK, Loki, CloudWatch) for:
+   - Structured logs from Winston
+   - Webhook processing errors
+   - InfluxDB write failures
+
+5. **Create runbooks** for common issues:
+   - High queue depth → Scale horizontally or investigate processing bottlenecks
+   - InfluxDB disconnected → Check network, credentials, and InfluxDB health
+   - High error rate → Check webhook signatures, payload validation, and dependencies
+
+### Troubleshooting
+
+**Metrics not appearing in Prometheus:**
+```bash
+# Check if metrics endpoint is working
+curl http://localhost:3000/metrics
+
+# Check Prometheus targets
+open http://localhost:9090/targets
+```
+
+**Grafana dashboard showing "No Data":**
+```bash
+# Verify Prometheus is configured in Grafana
+# Check datasources at http://localhost:3001/datasources
+
+# Test Prometheus query
+curl http://localhost:9090/api/v1/query?query=app_uptime_seconds
+```
+
+**High memory usage:**
+```bash
+# Check queue depth
+curl http://localhost:3000/health | jq '.checks.queue'
+
+# Clear processed events
+docker-compose restart ingestion
+```
+
 ## GitHub Webhook Setup
 
 ### Option 1: GitHub App (Recommended)

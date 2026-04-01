@@ -15,11 +15,30 @@ export interface RequestWithGitHub extends RequestWithId {
 }
 
 export interface HealthStatus {
-  status: 'healthy' | 'unhealthy';
+  status: 'healthy' | 'degraded' | 'unhealthy';
   version: string;
   timestamp: string;
   uptime: number;
   environment: string;
+  checks?: {
+    influxdb?: {
+      status: 'connected' | 'disconnected';
+      enabled: boolean;
+    };
+    queue?: {
+      status: 'healthy' | 'degraded';
+      pending: number;
+      processed: number;
+      total: number;
+      maxSize: number;
+    };
+    processor?: {
+      status: 'running' | 'stopped';
+      intervalMs: number;
+      isProcessing: boolean;
+    };
+  };
+  issues?: string[];
 }
 
 export interface GitHubWebhookPayload {

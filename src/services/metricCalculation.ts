@@ -2,6 +2,7 @@ import { logger } from '../config/logger';
 import { eventQueue } from './eventQueue';
 import { influxDBService } from './influxdb';
 import { WebhookEvent } from '../types';
+import { webhookProcessingDuration } from './metrics';
 
 /**
  * MetricCalculationService
@@ -60,41 +61,59 @@ class MetricCalculationService {
    * Process a single webhook event
    */
   private async processEvent(event: WebhookEvent): Promise<void> {
-    // Check for duplicates using delivery ID
-    if (this.processedDeliveryIds.has(event.deliveryId)) {
-      logger.debug('Duplicate event detected, skipping', {
-        eventId: event.id,
-        deliveryId: event.deliveryId,
-        eventType: event.eventType,
-      });
-      return;
-    }
+    const startTime = Date.now();
+    let status = 'success';
 
-    switch (event.eventType) {
-      case 'push':
-        await this.processPushEvent(event);
-        break;
-
-      case 'deployment_status':
-        await this.processDeploymentStatusEvent(event);
-        break;
-
-      case 'deployment':
-        // Deployment creation events don't need processing for metrics
-        logger.debug('Deployment creation event ignored', {
+    try {
+      // Check for duplicates using delivery ID
+      if (this.processedDeliveryIds.has(event.deliveryId)) {
+        logger.debug('Duplicate event detected, skipping', {
           eventId: event.id,
-        });
-        break;
-
-      default:
-        logger.debug('Unsupported event type for metric calculation', {
-          eventId: event.id,
+          deliveryId: event.deliveryId,
           eventType: event.eventType,
         });
-    }
+        status = 'duplicate';
+        return;
+      }
 
-    // Mark delivery ID as processed
-    this.addProcessedDeliveryId(event.deliveryId);
+      switch (event.eventType) {
+        case 'push':
+          await this.processPushEvent(event);
+          break;
+
+        case 'deployment_status':
+          await this.processDeploymentStatusEvent(event);
+          break;
+
+        case 'deployment':
+          // Deployment creation events don't need processing for metrics
+          logger.debug('Deployment creation event ignored', {
+            eventId: event.id,
+          });
+          status = 'ignored';
+          break;
+
+        default:
+          logger.debug('Unsupported event type for metric calculation', {
+            eventId: event.id,
+            eventType: event.eventType,
+          });
+          status = 'unsupported';
+      }
+
+      // Mark delivery ID as processed
+      this.addProcessedDeliveryId(event.deliveryId);
+    } catch (error) {
+      status = 'error';
+      throw error;
+    } finally {
+      // Track processing duration
+      const duration = (Date.now() - startTime) / 1000;
+      webhookProcessingDuration.observe(
+        { event_type: event.eventType, status },
+        duration
+      );
+    }
   }
 
   /**
